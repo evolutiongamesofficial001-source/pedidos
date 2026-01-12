@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Pedidos - Geladinho</title>
+
+<style>
+:root {
+  --roxo: #1b0033;
+  --roxo-card: #2d0059;
+  --amarelo: #ffd400;
+  --vermelho: #ff4040;
+}
+
+* {
+  box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #3a006f, #000);
+  color: #fff;
+  padding: 15px;
+}
+
+h1 {
+  text-align: center;
+  color: var(--amarelo);
+  margin-bottom: 15px;
+}
+
+.topo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.total {
+  background: var(--roxo-card);
+  padding: 15px 20px;
+  border-radius: 14px;
+  font-size: 18px;
+  box-shadow: 0 0 15px rgba(255,212,0,0.2);
+}
+
+.total span {
+  color: var(--amarelo);
+  font-weight: bold;
+}
+
+.busca {
+  flex: 1;
+  min-width: 220px;
+}
+
+.busca input {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  font-size: 16px;
+  outline: none;
+}
+
+.lista {
+  max-width: 1100px;
+  margin: auto;
+}
+
+.pedido {
+  background: var(--roxo-card);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 15px;
+  position: relative;
+  box-shadow: 0 0 18px rgba(255, 212, 0, 0.2);
+}
+
+.pedido p {
+  margin: 6px 0;
+  font-size: 15px;
+}
+
+.pedido span {
+  color: var(--amarelo);
+  font-weight: bold;
+}
+
+.origem {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+
+.delete-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: var(--vermelho);
+  border: none;
+  color: white;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.delete-btn:hover {
+  background: red;
+}
+
+.vazio {
+  opacity: 0.6;
+  font-style: italic;
+  text-align: center;
+  padding: 15px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>📦 Pedidos de Geladinho</h1>
+
+<div class="topo">
+  <div class="total">
+    Total do dia: <span id="totalVendas">R$ 0,00</span>
+  </div>
+
+  <div class="busca">
+    <input type="text" id="buscaNome" placeholder="🔎 Buscar por nome...">
+  </div>
+</div>
+
+<div class="lista" id="listaPedidos"></div>
+
+<script>
+const databases = [
+  {
+    nome: "Banco 1",
+    url: "https://gelado-pedido-default-rtdb.firebaseio.com/pedidos"
+  },
+  {
+    nome: "Banco 2",
+    url: "https://pedidos-gelado-2-default-rtdb.firebaseio.com/pedidos"
+  }
+];
+
+let pedidosGlobais = [];
+
+function carregarPedidos(db) {
+  return fetch(db.url + ".json")
+    .then(r => r.json())
+    .then(data => {
+      if (!data) return [];
+
+      return Object.entries(data).map(([id, p]) => ({
+        ...p,
+        _id: id,
+        _db: db
+      }));
+    });
+}
+
+function renderizar() {
+  const lista = document.getElementById("listaPedidos");
+  const filtro = document.getElementById("buscaNome").value.toLowerCase();
+
+  lista.innerHTML = "";
+  let total = 0;
+
+  const filtrados = pedidosGlobais.filter(p =>
+    (p.cliente || "").toLowerCase().includes(filtro)
+  );
+
+  if (filtrados.length === 0) {
+    lista.innerHTML = "<div class='vazio'>Nenhum pedido encontrado</div>";
+    document.getElementById("totalVendas").innerText = "R$ 0,00";
+    return;
+  }
+
+  filtrados.forEach(p => {
+    const valor = parseFloat(String(p.totalFinal || "0"));
+
+    total += isNaN(valor) ? 0 : valor;
+
+    const div = document.createElement("div");
+    div.className = "pedido";
+
+    div.innerHTML = `
+      <div class="origem">${p._db.nome}</div>
+      <button class="delete-btn">X</button>
+      <p><span>Cliente:</span> ${p.cliente || "-"}</p>
+      <p><span>Itens:</span> ${p.itens || "-"}</p>
+      <p><span>Valor:</span> R$ ${valor.toFixed(2).replace(".", ",")}</p>
+      <p><span>Pagamento:</span> ${p.pagamento || "-"}</p>
+      <p><span>Endereço:</span> ${p.endereco || "-"}</p>
+      <p><span>Data:</span> ${p.data ? new Date(p.data).toLocaleString("pt-BR") : "-"}</p>
+    `;
+
+    div.querySelector(".delete-btn").onclick = () => {
+      if (confirm("Deseja deletar este pedido?")) {
+        fetch(`${p._db.url}/${p._id}.json`, { method: "DELETE" });
+      }
+    };
+
+    lista.appendChild(div);
+  });
+
+  document.getElementById("totalVendas").innerText =
+    "R$ " + total.toFixed(2).replace(".", ",");
+}
+
+function atualizarTudo() {
+  Promise.all(databases.map(carregarPedidos))
+    .then(resultados => {
+      pedidosGlobais = resultados.flat();
+      renderizar();
+    });
+}
+
+document.getElementById("buscaNome").addEventListener("input", renderizar);
+
+atualizarTudo();
+setInterval(atualizarTudo, 3000);
+</script>
+
+</body>
+</html>
