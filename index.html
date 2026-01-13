@@ -151,13 +151,35 @@ const databases = [
 ];
 
 let pedidosGlobais = [];
+let ultimoTotalPedidos = 0;
+
+/* PERMISSÃO DE NOTIFICAÇÃO */
+if ("Notification" in window) {
+  Notification.requestPermission();
+}
+
+/* SERVICE WORKER */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js");
+}
+
+function notificarNovoPedido(qtd) {
+  if (Notification.permission === "granted") {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification("📦 Novo pedido recebido!", {
+        body: `Chegaram ${qtd} novo(s) pedido(s)!`,
+        icon: "https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
+        vibrate: [200, 100, 200]
+      });
+    });
+  }
+}
 
 function carregarPedidos(db) {
   return fetch(db.url + ".json")
     .then(r => r.json())
     .then(data => {
       if (!data) return [];
-
       return Object.entries(data).map(([id, p]) => ({
         ...p,
         _id: id,
@@ -184,8 +206,7 @@ function renderizar() {
   }
 
   filtrados.forEach(p => {
-    const valor = parseFloat(String(p.totalFinal || "0"));
-
+    const valor = parseFloat(p.totalFinal || 0);
     total += isNaN(valor) ? 0 : valor;
 
     const div = document.createElement("div");
@@ -218,7 +239,14 @@ function renderizar() {
 function atualizarTudo() {
   Promise.all(databases.map(carregarPedidos))
     .then(resultados => {
-      pedidosGlobais = resultados.flat();
+      const todos = resultados.flat();
+
+      if (ultimoTotalPedidos > 0 && todos.length > ultimoTotalPedidos) {
+        notificarNovoPedido(todos.length - ultimoTotalPedidos);
+      }
+
+      ultimoTotalPedidos = todos.length;
+      pedidosGlobais = todos;
       renderizar();
     });
 }
